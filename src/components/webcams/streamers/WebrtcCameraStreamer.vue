@@ -1,5 +1,5 @@
 <template>
-    <div>
+    <div class="position-relative d-flex">
         <video
             v-show="status === 'connected'"
             ref="stream"
@@ -8,10 +8,11 @@
             autoplay
             muted
             playsinline />
+        <webcam-nozzle-crosshair v-if="nozzleCrosshair" :webcam="camSettings" />
         <v-row v-if="status !== 'connected'">
             <v-col class="_webcam_webrtc_output text-center d-flex flex-column justify-center align-center">
                 <v-progress-circular v-if="status === 'connecting'" indeterminate color="primary" class="mb-3" />
-                <span class="mt-3">{{ status }}</span>
+                <span class="mt-3">{{ capitalize(status) }}</span>
             </v-col>
         </v-row>
     </div>
@@ -22,14 +23,20 @@ import { Component, Mixins, Prop, Ref, Watch } from 'vue-property-decorator'
 import BaseMixin from '@/components/mixins/base'
 import { GuiWebcamStateWebcam } from '@/store/gui/webcams/types'
 import WebcamMixin from '@/components/mixins/webcam'
+import { capitalize } from '@/plugins/helpers'
+import WebcamNozzleCrosshair from '@/components/webcams/WebcamNozzleCrosshair.vue'
 
 interface CameraStreamerResponse extends RTCSessionDescriptionInit {
     id: string
     iceServers?: RTCIceServer[]
 }
 
-@Component
+@Component({
+    components: { WebcamNozzleCrosshair },
+})
 export default class WebrtcCameraStreamer extends Mixins(BaseMixin, WebcamMixin) {
+    capitalize = capitalize
+
     pc: RTCPeerConnection | null = null
     useStun = false
     aspectRatio: null | number = null
@@ -58,6 +65,10 @@ export default class WebrtcCameraStreamer extends Mixins(BaseMixin, WebcamMixin)
         if (this.aspectRatio) output.aspectRatio = this.aspectRatio
 
         return output
+    }
+
+    get nozzleCrosshair() {
+        return this.camSettings.extra_data?.nozzleCrosshair ?? false
     }
 
     get expanded(): boolean {
@@ -125,7 +136,12 @@ export default class WebrtcCameraStreamer extends Mixins(BaseMixin, WebcamMixin)
 
         this.pc.addTransceiver('video', { direction: 'recvonly' })
 
-        this.pc.onicecandidate = (e: RTCPeerConnectionIceEvent) => this.onIceCandidate(e, iceResponse.id)
+        if ('iceServers' in iceResponse) {
+            this.pc.onicecandidate = (e: RTCPeerConnectionIceEvent) => this.onIceCandidate(e, iceResponse.id)
+        } else {
+            this.log('No ICE servers returned, so the current camera-streamer version may not support them')
+        }
+
         this.pc.onconnectionstatechange = () => this.onConnectionStateChange()
         this.pc.ontrack = (e) => this.onTrack(e)
 

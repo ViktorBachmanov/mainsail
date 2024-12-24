@@ -228,7 +228,13 @@ export const getters: GetterTree<PrinterState, RootState> = {
                 let singleChannelTarget = null
                 const colorData = object.state.color_data ?? []
 
-                if ('color_order' in object.settings) colorOrder = object.settings.color_order[0] ?? ''
+                if ('color_order' in object.settings) {
+                    if (typeof object.settings.color_order === 'string') {
+                        colorOrder = object.settings.color_order
+                    } else if (Array.isArray(object.settings.color_order) && object.settings.color_order.length > 0) {
+                        colorOrder = object.settings.color_order[0]
+                    }
+                }
 
                 if (object.type === 'led') {
                     colorOrder = ''
@@ -774,9 +780,9 @@ export const getters: GetterTree<PrinterState, RootState> = {
     },
 
     existsZtilt: (state) => {
-        if (!state.configfile?.settings) return false
+        if (!state.gcode) return false
 
-        return 'z_tilt' in state.configfile.settings
+        return 'Z_TILT_ADJUST' in state.gcode.commands
     },
 
     existsBedTilt: (state) => {

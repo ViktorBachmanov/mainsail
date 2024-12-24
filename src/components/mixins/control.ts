@@ -55,13 +55,35 @@ export default class ControlMixin extends Vue {
     }
 
     get colorZTilt() {
-        const status = this.$store.state.printer.z_tilt?.applied ?? true
+        let status = true
+
+        // normal Klipper z_tilt
+        if ('z_tilt' in this.$store.state.printer) {
+            status = this.$store.state.printer.z_tilt?.applied
+        }
+        // check Kalico next gen z_tilt
+        else if ('z_tilt_ng' in this.$store.state.printer) {
+            status = this.$store.state.printer.z_tilt_ng?.applied
+        }
 
         return status ? 'primary' : 'warning'
     }
 
     get defaultActionButton() {
         return this.$store.getters['gui/getDefaultControlActionButton']
+    }
+
+    get actionButton(): string {
+        const button = this.$store.state.gui.control.actionButton ?? this.defaultActionButton
+
+        if (
+            (button === 'qgl' && !this.$store.getters['printer/existsQGL']) ||
+            (button === 'ztilt' && !this.$store.getters['printer/existsZTilt'])
+        ) {
+            return this.defaultActionButton
+        }
+
+        return button
     }
 
     /**
@@ -97,6 +119,12 @@ export default class ControlMixin extends Vue {
 
                 return numberA - numberB
             })
+    }
+
+    get existsClientLinearMoveMacro() {
+        const macros = this.$store.state.printer?.gcode?.commands ?? {}
+
+        return '_CLIENT_LINEAR_MOVE' in macros
     }
 
     doHome() {
@@ -135,11 +163,27 @@ export default class ControlMixin extends Vue {
     }
 
     doSendMove(gcode: string, feedrate: number) {
-        gcode = 'G91' + '\n' + 'G1 ' + gcode + ' F' + feedrate * 60
+        let command =
+            `SAVE_GCODE_STATE NAME=_ui_movement\n` +
+            `G91\n` +
+            `G1 ${gcode} F${feedrate * 60}\n` +
+            `RESTORE_GCODE_STATE NAME=_ui_movement`
 
-        if (this.absolute_coordinates) gcode += '\nG90'
+        if (this.existsClientLinearMoveMacro) {
+            gcode = gcode
+                .split(' ')
+                .map((part) => {
+                    const axis = part.slice(0, 1)
+                    const value = parseFloat(part.slice(1))
 
-        this.doSend(gcode)
+                    return `${axis}=${value}`
+                })
+                .join(' ')
+
+            command = `_CLIENT_LINEAR_MOVE ${gcode} F=${feedrate * 60}`
+        }
+
+        this.doSend(command)
     }
 
     doSend(gcode: string) {
